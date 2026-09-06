@@ -13,7 +13,7 @@ import io
 import json
 import logging
 
-from openai import AsyncOpenAI, BadRequestError, RateLimitError
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI, BadRequestError, RateLimitError
 from PIL import Image
 
 from config import CONFIG
@@ -158,21 +158,24 @@ async def _openai_once(image_bytes: bytes, detail: str) -> SlipData:
         raise RuntimeError("could not parse extraction result") from exc
 
 
+_ESCALATION_OK = (RuntimeError, OSError, RateLimitError, APIStatusError, APIConnectionError)
+
+
 async def _extract_openai(image_bytes: bytes) -> SlipData:
     start = _calls
-    best = await _openai_once(image_bytes, "low")
+    best = await _openai_once(image_bytes, "low")  # a failure here bubbles up -> Gemini
     if _needs_high(best):
         try:
             cand = await _openai_once(image_bytes, "high")
             if _field_count(cand) >= _field_count(best):
                 best = cand
-        except (RuntimeError, OSError) as exc:
+        except _ESCALATION_OK as exc:
             log.warning("high-detail pass failed: %s", exc)
     if not _good(best):
         for deg in (270, 90, 180):
             try:
                 cand = await _openai_once(await asyncio.to_thread(_rotate, image_bytes, deg), "high")
-            except (RuntimeError, OSError) as exc:
+            except _ESCALATION_OK as exc:
                 log.warning("rotation %s failed: %s", deg, exc)
                 continue
             if _field_count(cand) > _field_count(best):
@@ -258,6 +261,12 @@ async def extract(image_bytes: bytes) -> SlipData:
         except _QuotaExhausted as exc:
             log.warning("OpenAI credit exhausted — switching to Gemini for all further slips")
             _openai_dead = True
+            last = exc
+            continue
+        except (RateLimitError, APIStatusError, APIConnectionError) as exc:
+            # transient OpenAI problem (rate limit / 5xx / network) - try Gemini
+            # for this slip but keep OpenAI as primary; it may recover.
+            log.warning("OpenAI unavailable (%s) — using Gemini for this slip", exc.__class__.__name__)
             last = exc
             continue
     raise last or RuntimeError("no extraction provider available")
