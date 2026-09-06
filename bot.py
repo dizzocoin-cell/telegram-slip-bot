@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import re
 import time
 
 from openai import APIStatusError, RateLimitError
@@ -99,6 +100,16 @@ async def _sender_caption(msg) -> str | None:
     return None
 
 
+def _feed_code(text: str | None) -> str | None:
+    """The team code (AK, ROU, ...) in the caption, if the feed channel is on."""
+    if not text or not CONFIG.slip_feed_channel or not CONFIG.route_codes:
+        return None
+    for token in re.findall(r"[A-Za-z]{2,6}", text):
+        if token.upper() in CONFIG.route_codes:
+            return token.upper()
+    return None
+
+
 async def cmd_id(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f"chat_id: `{update.effective_chat.id}`", parse_mode="Markdown")
 
@@ -173,6 +184,18 @@ async def handle_slip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         sent = True
         log.info("chat=%s msg=%s ref=%s primary=%s", msg.chat_id, msg.message_id, ref,
                  primary.value if primary else None)
+
+        if _feed_code(sender_text):
+            try:
+                await context.bot.send_photo(
+                    chat_id=CONFIG.slip_feed_channel,
+                    photo=io.BytesIO(png),
+                    filename=f"{ref}.png",
+                    caption=caption,
+                )
+                log.info("forwarded ref=%s to feed channel %s", ref, CONFIG.slip_feed_channel)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("feed-channel forward failed (ref=%s): %s", ref, exc)
 
     except (RateLimitError, APIStatusError) as exc:
         log.error("extraction API error chat=%s msg=%s: %s", msg.chat_id, msg.message_id, exc)

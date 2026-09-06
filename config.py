@@ -13,6 +13,10 @@ def _bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _codes(name: str) -> set[str]:
+    return {p.strip().upper() for p in os.getenv(name, "").replace(";", ",").split(",") if p.strip()}
+
+
 def _int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, "").strip() or default)
@@ -63,6 +67,11 @@ class Config:
     max_concurrency: int = _int("MAX_CONCURRENCY", 5)
     default_transfer_mode: str = os.getenv("DEFAULT_TRANSFER_MODE", "IMPS")
     branding: Branding = field(default_factory=Branding)
+
+    # Also send the recreated slip to this channel when the caption carries one
+    # of ROUTE_CODES. 0 = feature off.
+    slip_feed_channel: int = _int("SLIP_FEED_CHANNEL", 0)
+    route_codes: set[str] = field(default_factory=lambda: _codes("ROUTE_CODES"))
 
     def validate(self) -> None:
         missing = []
