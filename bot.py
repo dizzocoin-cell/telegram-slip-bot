@@ -122,7 +122,13 @@ async def handle_slip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         png = await asyncio.to_thread(render, data)
         ref = confirmation_ref(data)
         primary = data.primary_reference()
-        caption = f"{nice_label(primary.label)}: {primary.value}" if primary else None
+
+        lines = []
+        if msg.caption and msg.caption.strip():
+            lines.append(msg.caption.strip())          # whatever the sender wrote
+        if primary:
+            lines.append(f"{nice_label(primary.label)}: {primary.value}")
+        caption = "\n".join(lines)[:1024] or None
 
         await msg.reply_photo(
             photo=io.BytesIO(png),
