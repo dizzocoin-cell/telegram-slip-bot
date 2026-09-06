@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import time
 
 from openai import APIStatusError, RateLimitError
 from telegram import BotCommand, Update
@@ -68,6 +69,36 @@ def _is_image_doc(doc) -> bool:
     )
 
 
+# Telegram puts an album's caption on only one of its images. Remember it per
+# media_group_id so every reply in the album can carry the same caption.
+_ALBUM_CAPTIONS: dict[str, tuple[str, float]] = {}
+_ALBUM_TTL = 600.0
+
+
+def _remember_album_caption(msg) -> None:
+    if msg.media_group_id and msg.caption and msg.caption.strip():
+        _ALBUM_CAPTIONS[msg.media_group_id] = (msg.caption.strip(), time.monotonic())
+    if len(_ALBUM_CAPTIONS) > 300:
+        old = time.monotonic() - _ALBUM_TTL
+        for k in [k for k, (_, t) in _ALBUM_CAPTIONS.items() if t < old]:
+            _ALBUM_CAPTIONS.pop(k, None)
+
+
+async def _sender_caption(msg) -> str | None:
+    if msg.caption and msg.caption.strip():
+        return msg.caption.strip()
+    gid = msg.media_group_id
+    if not gid:
+        return None
+    # the captioned image of the album may arrive a moment after this one
+    for _ in range(15):
+        hit = _ALBUM_CAPTIONS.get(gid)
+        if hit:
+            return hit[0]
+        await asyncio.sleep(0.1)
+    return None
+
+
 async def cmd_id(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f"chat_id: `{update.effective_chat.id}`", parse_mode="Markdown")
 
@@ -86,6 +117,8 @@ async def handle_slip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         tg_file = msg.document
     else:
         return
+
+    _remember_album_caption(msg)
 
     if getattr(tg_file, "file_size", 0) and tg_file.file_size > MAX_DOWNLOAD:
         await msg.reply_text("That file is too large to process.", do_quote=True)
@@ -124,8 +157,9 @@ async def handle_slip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         primary = data.primary_reference()
 
         lines = []
-        if msg.caption and msg.caption.strip():
-            lines.append(msg.caption.strip())          # whatever the sender wrote
+        sender_text = await _sender_caption(msg)       # own caption, or the album's
+        if sender_text:
+            lines.append(sender_text)
         if primary:
             lines.append(f"{nice_label(primary.label)}: {primary.value}")
         caption = "\n".join(lines)[:1024] or None
