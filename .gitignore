@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+*.log
+preview.png
+assets/logo.png
+assets/fonts/*.ttf
+assets/fonts/*.otf
