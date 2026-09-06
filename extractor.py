@@ -202,7 +202,10 @@ async def _gemini_once(image_bytes: bytes) -> SlipData:
             types.Part.from_bytes(data=image_bytes, mime_type=_media_type(image_bytes)),
             f"{_SYSTEM}\n\n{_USER}",
         ],
-        config=types.GenerateContentConfig(response_mime_type="application/json"),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        ),
     )
     try:
         return SlipData.model_validate(_loads(resp.text or ""))

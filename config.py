@@ -58,7 +58,7 @@ class Config:
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     extraction_model: str = os.getenv("EXTRACTION_MODEL", "gpt-4o-mini")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     max_concurrency: int = _int("MAX_CONCURRENCY", 5)
     default_transfer_mode: str = os.getenv("DEFAULT_TRANSFER_MODE", "IMPS")
