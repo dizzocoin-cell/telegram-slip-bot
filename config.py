@@ -52,8 +52,14 @@ class Branding:
 class Config:
     telegram_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     allowed_chat_ids: set[int] = field(default_factory=lambda: _ids("ALLOWED_CHAT_IDS"))
+
+    # openai | gemini | auto  (auto = OpenAI until its credit runs out, then Gemini)
+    provider: str = os.getenv("PROVIDER", "openai").strip().lower()
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     extraction_model: str = os.getenv("EXTRACTION_MODEL", "gpt-4o-mini")
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
     max_concurrency: int = _int("MAX_CONCURRENCY", 5)
     default_transfer_mode: str = os.getenv("DEFAULT_TRANSFER_MODE", "IMPS")
     branding: Branding = field(default_factory=Branding)
@@ -62,8 +68,14 @@ class Config:
         missing = []
         if not self.telegram_token:
             missing.append("TELEGRAM_BOT_TOKEN")
-        if not self.openai_api_key:
+        if self.provider in ("openai", "auto") and not self.openai_api_key:
             missing.append("OPENAI_API_KEY")
+        if self.provider in ("gemini", "auto") and not self.gemini_api_key:
+            # auto can run on OpenAI alone; it just can't fail over
+            if self.provider == "gemini":
+                missing.append("GEMINI_API_KEY")
+        if self.provider not in ("openai", "gemini", "auto"):
+            raise SystemExit(f"PROVIDER must be openai, gemini or auto (got {self.provider!r})")
         if missing:
             raise SystemExit(f"Missing required env vars: {', '.join(missing)}")
 

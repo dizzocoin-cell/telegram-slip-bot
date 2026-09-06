@@ -1,5 +1,6 @@
 python-telegram-bot[rate-limiter]>=21.6,<23
 openai>=1.40,<2
+google-genai>=1.0
 pydantic>=2.6
 Pillow>=10.2
 pillow-heif>=0.16
